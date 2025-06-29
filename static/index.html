@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Web Scraper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .results {
+            margin-top: 20px;
+        }
+
+        .source-result {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .status-started {
+            border-left: 4px solid #ffc107;
+        }
+
+        .status-completed {
+            border-left: 4px solid #28a745;
+        }
+
+        .status-error {
+            border-left: 4px solid #dc3545;
+        }
+
+        .source-url {
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .status {
+            margin-top: 5px;
+            font-size: 14px;
+        }
+
+        .articles-count {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .error-message {
+            color: #dc3545;
+        }
+
+        .articles-list {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .articles-list h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+
+        .article-item {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .article-item h5 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+
+        .article-item h5 a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .article-item h5 a:hover {
+            text-decoration: underline;
+        }
+
+        .article-content {
+            font-size: 12px;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🕷️ Web Scraper</h1>
+
+    <form id="scrapeForm">
+        <div class="form-group">
+            <label for="sources">Enter URLs to scrape (one per line):</label>
+            <textarea id="sources" name="sources"
+                placeholder="https://example.com/news&#10;https://another-site.com/articles" required></textarea>
+        </div>
+
+        <button type="submit" id="scrapeBtn">Start Scraping</button>
+    </form>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Scraping in progress...</p>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <script>
+        document.getElementById('scrapeForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const sourcesText = document.getElementById('sources').value;
+            const sources = sourcesText.split('\n').filter(s => s.trim());
+
+            if (sources.length === 0) {
+                alert('Please enter at least one URL');
+                return;
+            }
+
+            startScraping(sources);
+        });
+
+        function startScraping(sources) {
+            const scrapeBtn = document.getElementById('scrapeBtn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+
+            // Show loading, disable button, clear previous results
+            scrapeBtn.disabled = true;
+            loading.style.display = 'block';
+            results.innerHTML = '';
+
+            // Remove the EventSource code completely
+            // Use only fetch with streaming
+            fetch('/scrape', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ sources: sources })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = ''; // Buffer to accumulate incomplete chunks
+
+                    function readStream() {
+                        return reader.read().then(({ done, value }) => {
+                            if (done) {
+                                // Process any remaining data in buffer
+                                if (buffer.trim()) {
+                                    processBuffer(buffer);
+                                }
+
+                                // Scraping finished
+                                scrapeBtn.disabled = false;
+                                loading.style.display = 'none';
+                                return;
+                            }
+
+                            // Accumulate chunk in buffer
+                            buffer += decoder.decode(value, { stream: true });
+
+                            // Process complete lines
+                            const lines = buffer.split('\n');
+
+                            // Keep the last incomplete line in buffer
+                            buffer = lines.pop() || '';
+
+                            // Process complete lines
+                            lines.forEach(line => {
+                                if (line.startsWith('data: ')) {
+                                    try {
+                                        const jsonStr = line.substring(6).trim();
+                                        if (jsonStr && jsonStr !== '{}') {
+                                            const data = JSON.parse(jsonStr);
+                                            updateResults(data);
+                                        }
+                                    } catch (e) {
+                                        // Only log if it's not an obviously incomplete JSON
+                                        if (!line.includes('"Content":"') || line.length < 1000) {
+                                            console.error('Error parsing JSON:', e);
+                                            console.error('Problematic line length:', line.length);
+                                            console.error('Line preview:', line.substring(0, 100) + '...');
+                                        }
+                                    }
+                                }
+                            });
+
+                            return readStream();
+                        });
+                    }
+
+                    function processBuffer(bufferContent) {
+                        const lines = bufferContent.split('\n');
+                        lines.forEach(line => {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const jsonStr = line.substring(6).trim();
+                                    if (jsonStr) {
+                                        const data = JSON.parse(jsonStr);
+                                        updateResults(data);
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing buffered JSON:', e);
+                                }
+                            }
+                        });
+                    }
+
+                    return readStream();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    scrapeBtn.disabled = false;
+                    loading.style.display = 'none';
+                    alert('An error occurred while scraping: ' + error.message);
+                });
+        }
+
+        function updateResults(data) {
+            console.log('Received data:', data);
+            const results = document.getElementById('results');
+            const status = data.status.toLowerCase();
+
+            if (status === 'finished') {
+                const finishedDiv = document.createElement('div');
+                finishedDiv.className = 'source-result';
+                finishedDiv.innerHTML = `
+                    <div class="source-url">✅ ${data.message}</div>
+                `;
+                results.appendChild(finishedDiv);
+                return;
+            }
+
+            // Find existing result div or create new one
+            let resultDiv = document.getElementById('result-' + btoa(data.source));
+
+            if (!resultDiv) {
+                resultDiv = document.createElement('div');
+                resultDiv.id = 'result-' + btoa(data.source);
+                resultDiv.className = 'source-result';
+                results.appendChild(resultDiv);
+            }
+
+            // Update status styling
+            resultDiv.className = `source-result status-${status}`;
+
+            let statusHtml = '';
+            if (status === 'started') {
+                statusHtml = `<div class="status">🔄 ${data.message}</div>`;
+            } else if (status === 'completed') {
+                const articleCount = data.count || data.articles || 0;
+
+                // Check both possible field names for articles array
+                const articlesArray = data.articles || data.data || [];
+                console.log('Articles array:', articlesArray);
+
+                // Build articles HTML
+                let articlesHtml = '';
+                if (articlesArray && Array.isArray(articlesArray) && articlesArray.length > 0) {
+                    articlesHtml = `
+                        <div class="articles-list">
+                            <h4>📰 Scraped Articles (${articlesArray.length}):</h4>
+                            ${articlesArray.map((article, index) => {
+                        const title = article.Title || 'No title';
+                        const url = article.URL || '#';
+                        const content = article.Content || 'No content';
+                        const preview = content.length > 200 ? content.substring(0, 200) + '...' : content;
+
+                        return `
+                                    <div class="article-item">
+                                        <h5><a href="${url}" target="_blank">${title}</a></h5>
+                                        <div class="article-content">${preview}</div>
+                                    </div>
+                                `;
+                    }).join('')}
+                        </div>
+                    `;
+                } else {
+                    console.log('No articles found in data:', data);
+                }
+
+                statusHtml = `
+                    <div class="status">
+                        ✅ ${data.message}
+                        <span class="articles-count">(${articlesArray.length || articleCount} articles)</span>
+                    </div>
+                    ${articlesHtml}
+                `;
+            } else if (status === 'error') {
+                statusHtml = `<div class="status error-message">❌ ${data.error || data.message}</div>`;
+            }
+
+            resultDiv.innerHTML = `
+                <div class="source-url">${data.source}</div>
+                ${statusHtml}
+            `;
+        }
+    </script>
+</body>
+
+</html>
