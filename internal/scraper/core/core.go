@@ -18,11 +18,12 @@ func ScrapeFromSource(setting model.ScraperSettings) []model.Data {
 	domain, err := url.Parse(setting.Source)
 
 	if err != nil {
-		log.Println("Invalid source URL:", err)
+		log.Printf("Invalid source URL '%s': %v", setting.Source, err)
 		return data
 	}
 
 	c.AllowedDomains = []string{
+		domain.Host,
 		domain.Hostname(),
 	}
 
