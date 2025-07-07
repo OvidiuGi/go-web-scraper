@@ -1,4 +1,4 @@
-# Web Scraper
+# Go Web Scraper
 
 A powerful web scraping application built with Go that can extract articles from news websites with real-time progress tracking via Server-Sent Events (SSE).
 
@@ -10,23 +10,38 @@ A powerful web scraping application built with Go that can extract articles from
 - 🚀 **Concurrent processing** - Parallel scraping for multiple sources
 - 🌐 **Clean web interface** - Simple UI for managing scraping tasks
 - ⚙️ **Configurable settings** - Customizable scraping parameters per source
+- 🐳 **Docker support** - Containerized deployment with Docker Compose
 
 ## Project Structure
 
 ```
 go-web-scraper/
-├── handlers/           # HTTP request handlers
-│   ├── health.go      # Health check endpoint
-│   └── scrape.go      # Scraping endpoint with SSE
-├── models/            # Data models and structures
-│   └── article.go     # Article and scraper configuration models
-├── scraper/           # Core scraping logic
-│   └── scraper.go     # Colly-based web scraping implementation
-├── static/            # Frontend assets
-│   └── index.html     # Web interface
-├── main.go           # Application entry point
-├── go.mod            # Go module dependencies
-└── README.md         # This file
+├── cmd/
+│   └── api/
+│       └── main.go            # Application entry point
+├── internal/
+│   ├── api/
+│   │   ├── handler/
+│   │   │   ├── health.go      # Health check endpoint
+│   │   │   └── scrape.go      # Scraping endpoint with SSE
+│   │   └── router/
+│   │       └── router.go      # HTTP router configuration
+│   ├── scraper/
+│   │   ├── core/
+│   │   │   └── core.go        # Core scraping orchestration
+│   │   └── parser/
+│   │       └── parser.go      # HTML parsing and data extraction
+│   └── shared/
+│       ├── config/
+│       │   └── config.go      # Configuration management
+│       └── model/
+│           ├── data.go        # Data structures for scraped content
+│           └── types.go       # Request/response types
+├── static/
+│   └── index.html             # Web interface
+├── docker-compose.yml         # Docker Compose configuration
+├── go.mod                     # Go module dependencies
+└── README.md                  # This file
 ```
 
 ## Dependencies
@@ -37,9 +52,11 @@ go-web-scraper/
 
 ## Installation
 
+### Local Development
+
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/go-web-scraper.git
+   git clone https://github.com/OvidiuGi/go-web-scraper.git
    cd go-web-scraper
    ```
 
@@ -50,7 +67,7 @@ go-web-scraper/
 
 3. **Run the application:**
    ```bash
-   go run main.go
+   go run cmd/api/main.go
    ```
 
 4. **Open your browser:**
@@ -166,53 +183,72 @@ Health check endpoint.
 
 ### Supported Sites
 
-The scraper is currently configured for:
+The scraper includes specialized configurations for:
 
-- **Euronews Romania** (`https://www.euronews.ro/categorii/romania`)
-- **Digi24 Politics** (`https://www.digi24.ro/stiri/actualitate/politica`)
+- **Euronews Romania** - `https://www.euronews.ro/categorii/romania`
+  - Uses specific `/articole` path filtering
+  - Extracts content from `div[itemprop='articleBody'] p` elements
+  
+- **Digi24** - `https://www.digi24.ro/stiri/actualitate/politica`
+  - Flexible CSS selector-based extraction
+  - Content parsing from `div.data-app-meta-article` containers
+  - Support for lists and structured content
 
-Additional sites can be added by configuring appropriate CSS selectors.
+Additional sites can be added by configuring appropriate CSS selectors in the request payload.
 
-## Web Interface
+### Custom Configurations
 
-The application includes a user-friendly web interface accessible at `http://localhost:8080`:
+```go
+type ScraperSettings struct {
+    Source          string        `json:"source"`
+    SourceSearchTag string        `json:"source_search_tag"`
+    VisitChild      bool          `json:"visit_child"`
+    ChildSettings   ChildSettings `json:"child_settings"`
+}
 
-- **URL Input**: Add multiple URLs (one per line)
-- **Real-time Progress**: See scraping progress as it happens
-- **Article Display**: View scraped articles with titles and content previews
-- **Error Handling**: Clear error messages for failed scraping attempts
+type ChildSettings struct {
+    SearchAttr string `json:"search_attr"`
+    TitleAttr  string `json:"title_attr"`
+}
+```
 
-## Development
+## Architecture
 
-### Adding New Sites
+### Core Components
 
-1. Analyze the target site's HTML structure
-2. Identify CSS selectors for:
-   - Article links on listing pages
-   - Article title on individual pages
-   - Article content containers
-3. Test selectors using browser developer tools
-4. Configure the scraper settings accordingly
+- **`cmd/api/main.go`** - Application entry point with server initialization
+- **`internal/api/handler/`** - HTTP request handlers for REST endpoints
+- **`internal/api/router/`** - HTTP routing configuration
+- **`internal/scraper/core/`** - Core scraping orchestration logic
+- **`internal/scraper/parser/`** - HTML parsing and content extraction
+- **`internal/shared/config/`** - Configuration management
+- **`internal/shared/model/`** - Data models and type definitions
 
-### Code Structure
+### Data Flow
 
-- **Handlers**: HTTP request/response logic with SSE streaming
-- **Models**: Data structures for articles and configuration
-- **Scraper**: Core scraping logic using Colly framework
-- **Frontend**: Vanilla JavaScript with streaming response handling
+1. **HTTP Request** → API Handler
+2. **Configuration** → Scraper Core
+3. **Colly Collectors** → Parser Functions
+4. **Extracted Data** → SSE Stream
+5. **Real-time Updates** → Web Interface
+
+### Scraping Process
+
+1. **Main Collector** visits the source URL
+2. **CSS Selectors** find article links
+3. **Child Collector** visits individual articles
+4. **Parser Functions** extract title and content
+5. **Data Structures** store results
+6. **SSE Stream** sends real-time updates
 
 ## License
 
 This project is open source and available under the [MIT License](LICENSE).
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
 ## Disclaimer
 
-This tool is for educational purposes. Please respect robots.txt files and website terms of service when scraping. Implement appropriate rate limiting and be respectful to target websites.
+This tool is for educational and research purposes. Please respect:
+- Website terms of service
+- Copyright and content ownership
+
+Implement appropriate delays and be respectful to target websites to avoid overloading their servers.
