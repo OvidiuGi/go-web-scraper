@@ -13,6 +13,14 @@ func ConfigureMainCollector(c *colly.Collector, childCollector *colly.Collector,
 		log.Println("Visiting", r.URL)
 	})
 
+	if setting.VisitChild {
+		if strings.Contains(setting.Source, "euronews") {
+			childCollector.OnHTML(setting.ChildSettings.SearchAttr, ChildOnHTMLCallback(setting.ChildSettings, data))
+		} else {
+			childCollector.OnHTML(setting.ChildSettings.SearchAttr, ChildOnHTMLCallback2(setting.ChildSettings, data))
+		}
+	}
+
 	c.OnHTML(setting.SourceSearchTag, func(e *colly.HTMLElement) {
 		href := e.Attr("href")
 
@@ -20,13 +28,9 @@ func ConfigureMainCollector(c *colly.Collector, childCollector *colly.Collector,
 			if strings.Contains(setting.Source, "euronews") {
 				if strings.Contains(href, "/articole") {
 					childCollector.Visit("https://www.euronews.ro" + href)
-
-					childCollector.OnHTML(setting.ChildSettings.SearchAttr, ChildOnHTMLCallback(setting.ChildSettings, data))
 				}
 			} else {
 				childCollector.Visit(setting.Source + href)
-
-				childCollector.OnHTML(setting.ChildSettings.SearchAttr, ChildOnHTMLCallback2(setting.ChildSettings, data))
 			}
 		}
 	})
